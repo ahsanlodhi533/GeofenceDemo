@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geofencing Specific Counters</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <style>
+        body { margin:0; font-family: 'Segoe UI', Roboto, sans-serif; }
+        #map { height:100vh; width:100%; }
+
+        .header-wrapper {
+            display: flex;
+            align-items: center;
+            background: white;
+            border: 2px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            position: absolute;
+            bottom: 12px; 
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            z-index: 1000;
+        }
+
+        .area-name { color: white; padding: 4px 10px; font-weight: bold; font-size: 12px; text-transform: uppercase; }
+        .stats-box { display: flex; gap: 10px; padding: 4px 10px; background: white; border-radius: 0 8px 8px 0; }
+        .stat { display: flex; align-items: baseline; gap: 4px; }
+        .val { font-size: 16px; font-weight: 800; }
+        .unit { font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; }
+        .in-color { color: #27ae60; }
+        .out-color { color: #e74c3c; }
+
+        .leaflet-div-icon { background: transparent !important; border: none !important; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<script>
+$(document).ready(function(){
+
+    var map = L.map('map').setView([31.525, 74.355], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    var areas = [
+        {id:'Alpha', bounds:[[31.527,74.348],[31.534,74.355]], color:'#2c3e50'},
+        {id:'Beta', bounds:[[31.527,74.358],[31.534,74.365]], color:'#8e44ad'},
+        {id:'Gamma', bounds:[[31.518,74.348],[31.525,74.355]], color:'#d35400'},
+        {id:'Delta', bounds:[[31.518,74.358],[31.525,74.365]], color:'#16a085'}
+    ];
+
+    areas.forEach(function(area){
+        // Draw Area
+        L.rectangle(area.bounds, {
+            color: area.color,
+            weight: 2,
+            fillOpacity: 0.1,
+            dashArray: '4, 4'
+        }).addTo(map);
+
+        // Header Position (Top Center of each area)
+        var northLat = area.bounds[1][0];
+        var centerLng = (area.bounds[0][1] + area.bounds[1][1]) / 2;
+
+        area.label = L.marker([northLat, centerLng], {
+            icon: L.divIcon({
+                className: 'header-icon',
+                html: `
+                    <div class="header-wrapper" style="border-color: ${area.color}">
+                        <div class="area-name" style="background: ${area.color}">${area.id}</div>
+                        <div class="stats-box">
+                            <div class="stat">
+                                <span class="val in-color inside-count">0</span>
+                                <span class="unit">In</span>
+                            </div>
+                            <div class="stat">
+                                <span class="val out-color outside-count">0</span>
+                                <span class="unit">Out</span>
+                            </div>
+                        </div>
+                    </div>`,
+                iconSize: [0, 0]
+            })
+        }).addTo(map);
+
+        // Create 10 dedicated markers for THIS area only
+        area.markers = [];
+        var sw = area.bounds[0], ne = area.bounds[1];
+        
+        for(var i=0; i<10; i++){
+            // Starting near the area boundary
+            var startLat = sw[0] + Math.random() * (ne[0] - sw[0]);
+            var startLng = sw[1] + Math.random() * (ne[1] - sw[1]);
+            
+            var m = L.circleMarker([startLat, startLng], {
+                radius: 6, color: '#fff', weight: 1, fillColor: '#27ae60', fillOpacity: 1
+            }).addTo(map);
+            
+            area.markers.push(m);
+        }
+    });
+
+    function updateSpecificAreas(){
+        areas.forEach(function(area){
+            var inside = 0;
+            var outside = 0;
+            var bounds = L.latLngBounds(area.bounds);
+
+            area.markers.forEach(function(marker){
+                // Movement: Har marker apne area ke aas paas hi rahega
+                var pos = marker.getLatLng();
+                var moveLat = pos.lat + (Math.random()-0.5) * 0.002;
+                var moveLng = pos.lng + (Math.random()-0.5) * 0.002;
+                marker.setLatLng([moveLat, moveLng]);
+
+                // Check condition for THIS area only
+                if(bounds.contains(marker.getLatLng())){
+                    inside++;
+                    marker.setStyle({fillColor: '#27ae60'}); // Green if inside
+                } else {
+                    outside++;
+                    marker.setStyle({fillColor: '#e74c3c'}); // Red if outside
+                }
+            });
+
+            // Update only this area's label
+            var el = area.label.getElement();
+            if(el){
+                el.querySelector('.inside-count').innerText = inside;
+                el.querySelector('.outside-count').innerText = outside;
+            }
+        });
+    }
+
+    setInterval(updateSpecificAreas, 1500);
+    updateSpecificAreas();
+});
+</script>
+
+</body>
+</html>
