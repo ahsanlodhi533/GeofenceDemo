@@ -1,142 +1,167 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Geofencing Specific Counters</title>
+    <title>EA-8596 Geofence Simulation</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
     <style>
-        body { margin:0; font-family: 'Segoe UI', Roboto, sans-serif; }
+        body { margin:0; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
         #map { height:100vh; width:100%; }
-
-        .header-wrapper {
-            display: flex;
-            align-items: center;
-            background: white;
-            border: 2px solid #333;
-            border-radius: 8px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-            position: absolute;
-            bottom: 12px; 
-            left: 50%;
-            transform: translateX(-50%);
-            white-space: nowrap;
-            z-index: 1000;
+        
+        /* Floating Info Box */
+        .info-box {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(255, 255, 255, 0.95); padding: 20px; border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2); z-index: 1000;
+            width: 240px; border-left: 5px solid #2c3e50;
         }
 
-        .area-name { color: white; padding: 4px 10px; font-weight: bold; font-size: 12px; text-transform: uppercase; }
-        .stats-box { display: flex; gap: 10px; padding: 4px 10px; background: white; border-radius: 0 8px 8px 0; }
-        .stat { display: flex; align-items: baseline; gap: 4px; }
-        .val { font-size: 16px; font-weight: 800; }
-        .unit { font-size: 9px; color: #666; font-weight: bold; text-transform: uppercase; }
-        .in-color { color: #27ae60; }
-        .out-color { color: #e74c3c; }
+        .unit-title { font-size: 16px; font-weight: 800; color: #2c3e50; margin-bottom: 5px; display: block; }
+        .mode-tag { font-size: 10px; background: #3498db; color: white; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; }
+        
+        hr { border: 0; border-top: 1px solid #eee; margin: 15px 0; }
 
-        .leaflet-div-icon { background: transparent !important; border: none !important; }
+        /* Status Indicator */
+        .status-container { display: flex; align-items: center; gap: 10px; }
+        .status-dot { 
+            height: 14px; width: 14px; border-radius: 50%; 
+            transition: all 0.3s ease;
+        }
+        
+        .bg-green { background-color: #27ae60; box-shadow: 0 0 10px rgba(39, 174, 96, 0.6); }
+        .bg-red { background-color: #e74c3c; box-shadow: 0 0 15px rgba(231, 76, 60, 0.8); animation: pulse-red 0.8s infinite; }
+        
+        .status-text { font-weight: 700; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .text-green { color: #27ae60; }
+        .text-red { color: #e74c3c; }
+
+        /* Animations */
+        @keyframes pulse-red {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes blink-area {
+            0% { fill-opacity: 0.1; stroke-width: 3; }
+            50% { fill-opacity: 0.5; stroke-width: 6; }
+            100% { fill-opacity: 0.1; stroke-width: 3; }
+        }
+
+        .blink-polygon { 
+            animation: blink-area 0.8s infinite !important; 
+        }
     </style>
 </head>
 <body>
 
 <div id="map"></div>
 
+<div class="info-box">
+    <span class="unit-title">EA-8596 (Descon)</span>
+    <span class="mode-tag">Live Simulation</span>
+    <hr>
+    <div class="status-container">
+        <div id="dot" class="status-dot bg-green"></div>
+        <div id="status-label" class="status-text text-green">Inside Area</div>
+    </div>
+    <div style="margin-top: 10px; font-size: 11px; color: #666;">
+        Lat: <span id="lat-val">-</span><br>
+        Lng: <span id="lng-val">-</span>
+    </div>
+</div>
+
 <script>
 $(document).ready(function(){
-
-    var map = L.map('map').setView([31.525, 74.355], 15);
+    // Madina Coordinate Center
+    var startPos = [24.492993, 39.65313];
+    var map = L.map('map', { zoomControl: false }).setView(startPos, 14);
+    
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    L.control.zoom({ position: 'bottomleft' }).addTo(map);
 
-    var areas = [
-        {id:'Alpha', bounds:[[31.527,74.348],[31.534,74.355]], color:'#2c3e50'},
-        {id:'Beta', bounds:[[31.527,74.358],[31.534,74.365]], color:'#8e44ad'},
-        {id:'Gamma', bounds:[[31.518,74.348],[31.525,74.355]], color:'#d35400'},
-        {id:'Delta', bounds:[[31.518,74.358],[31.525,74.365]], color:'#16a085'}
+    // Geofence Design
+    var geofenceCoords = [
+        [24.510, 39.640], [24.515, 39.660], [24.505, 39.680], 
+        [24.485, 39.675], [24.475, 39.655], [24.480, 39.635], [24.495, 39.630]
     ];
+    
+    var polyLayer = L.polygon(geofenceCoords, {
+        color: '#2c3e50', 
+        fillColor: '#2c3e50',
+        weight: 3, 
+        fillOpacity: 0.1
+    }).addTo(map);
 
-    areas.forEach(function(area){
-        // Draw Area
-        L.rectangle(area.bounds, {
-            color: area.color,
-            weight: 2,
-            fillOpacity: 0.1,
-            dashArray: '4, 4'
-        }).addTo(map);
+    // Marker Customization
+    var liveMarker = L.circleMarker(startPos, {
+        radius: 8,
+        color: '#fff',
+        weight: 2,
+        fillColor: '#3498db',
+        fillOpacity: 1
+    }).addTo(map).bindPopup("<b>Unit: EA-8596</b>").openPopup();
 
-        // Header Position (Top Center of each area)
-        var northLat = area.bounds[1][0];
-        var centerLng = (area.bounds[0][1] + area.bounds[1][1]) / 2;
-
-        area.label = L.marker([northLat, centerLng], {
-            icon: L.divIcon({
-                className: 'header-icon',
-                html: `
-                    <div class="header-wrapper" style="border-color: ${area.color}">
-                        <div class="area-name" style="background: ${area.color}">${area.id}</div>
-                        <div class="stats-box">
-                            <div class="stat">
-                                <span class="val in-color inside-count">0</span>
-                                <span class="unit">In</span>
-                            </div>
-                            <div class="stat">
-                                <span class="val out-color outside-count">0</span>
-                                <span class="unit">Out</span>
-                            </div>
-                        </div>
-                    </div>`,
-                iconSize: [0, 0]
-            })
-        }).addTo(map);
-
-        // Create 10 dedicated markers for THIS area only
-        area.markers = [];
-        var sw = area.bounds[0], ne = area.bounds[1];
-        
-        for(var i=0; i<10; i++){
-            // Starting near the area boundary
-            var startLat = sw[0] + Math.random() * (ne[0] - sw[0]);
-            var startLng = sw[1] + Math.random() * (ne[1] - sw[1]);
-            
-            var m = L.circleMarker([startLat, startLng], {
-                radius: 6, color: '#fff', weight: 1, fillColor: '#27ae60', fillOpacity: 1
-            }).addTo(map);
-            
-            area.markers.push(m);
+    // Ray-casting algorithm for geofencing
+    function isInside(lat, lng, poly) {
+        var x = lat, y = lng;
+        var vs = poly.getLatLngs()[0];
+        var inside = false;
+        for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+            var xi = vs[i].lat, yi = vs[i].lng;
+            var xj = vs[j].lat, yj = vs[j].lng;
+            var intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
         }
-    });
-
-    function updateSpecificAreas(){
-        areas.forEach(function(area){
-            var inside = 0;
-            var outside = 0;
-            var bounds = L.latLngBounds(area.bounds);
-
-            area.markers.forEach(function(marker){
-                // Movement: Har marker apne area ke aas paas hi rahega
-                var pos = marker.getLatLng();
-                var moveLat = pos.lat + (Math.random()-0.5) * 0.002;
-                var moveLng = pos.lng + (Math.random()-0.5) * 0.002;
-                marker.setLatLng([moveLat, moveLng]);
-
-                // Check condition for THIS area only
-                if(bounds.contains(marker.getLatLng())){
-                    inside++;
-                    marker.setStyle({fillColor: '#27ae60'}); // Green if inside
-                } else {
-                    outside++;
-                    marker.setStyle({fillColor: '#e74c3c'}); // Red if outside
-                }
-            });
-
-            // Update only this area's label
-            var el = area.label.getElement();
-            if(el){
-                el.querySelector('.inside-count').innerText = inside;
-                el.querySelector('.outside-count').innerText = outside;
-            }
-        });
+        return inside;
     }
 
-    setInterval(updateSpecificAreas, 1500);
-    updateSpecificAreas();
+    // Movement Simulation (Lissajous Curve for natural In/Out feel)
+    var step = 0;
+    function runSimulation() {
+        step += 0.035; 
+        
+        // Is logic se marker geofence ke edges ko bar bar touch karega
+        var curLat = startPos[0] + Math.sin(step) * 0.022; 
+        var curLng = startPos[1] + Math.sin(step * 0.5) * 0.026;
+        
+        var newPos = [curLat, curLng];
+        liveMarker.setLatLng(newPos);
+        
+        // Update Lat/Lng display
+        $("#lat-val").text(curLat.toFixed(6));
+        $("#lng-val").text(curLng.toFixed(6));
+
+        var statusLabel = $("#status-label");
+        var dot = $("#dot");
+
+        if (isInside(curLat, curLng, polyLayer)) {
+            // --- INSIDE STATE ---
+            dot.removeClass("bg-red").addClass("bg-green");
+            statusLabel.text("Inside Area").removeClass("text-red").addClass("text-green");
+            
+            polyLayer.setStyle({ color: '#2c3e50', fillColor: '#2c3e50' });
+            if(polyLayer._path) L.DomUtil.removeClass(polyLayer._path, 'blink-polygon');
+            
+            liveMarker.setStyle({ fillColor: '#3498db' }); // Blue when safe
+        } else {
+            // --- ALERT STATE ---
+            dot.removeClass("bg-green").addClass("bg-red");
+            statusLabel.text("Out of Bounds").removeClass("text-green").addClass("text-red");
+            
+            polyLayer.setStyle({ color: '#e74c3c', fillColor: '#e74c3c' });
+            if(polyLayer._path) L.DomUtil.addClass(polyLayer._path, 'blink-polygon');
+            
+            liveMarker.setStyle({ fillColor: '#e74c3c' }); // Red when alert
+            liveMarker.bindPopup("<b style='color:red;'>ALARM: EA-8596 EXITED AREA!</b>").openPopup();
+        }
+
+        map.panTo(newPos, { animate: true, duration: 0.5 });
+    }
+
+    // Start Demo
+    setInterval(runSimulation, 800);
 });
 </script>
 
